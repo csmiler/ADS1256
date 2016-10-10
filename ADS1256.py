@@ -79,7 +79,7 @@ class ADS1256:
         self.Gain = ADS1256_GAIN_E['ADS1256_GAIN_1']		# GAIN  1
         self.DataRate = ADS1256_DRATE_E['ADS1256_15SPS'] # DATA output speed
         self.AdcNow = [0, 0, 0, 0, 0, 0, 0, 0]			  # ADC  Conversion value
-        self.Channel = 0   # The current channel
+        self.Channel = 1   # The current channel
         self.ScanMode = 0  # Scanning mode_ 0 : Single-ended input  8 channel; 1 : Differential input  4 channel
         
         
@@ -403,7 +403,7 @@ class ADS1256:
         voltage : output DAC value'''
         return np.int16(65536 * voltage / Vref)
     
-def main():
+def main_ADS1256():
     '''Module testing helper function'''
 
     print "TESTING STARTS!"
@@ -423,7 +423,7 @@ def main():
         volt_val = [0,0,0,0,0,0,0,0] #-2.0
         while True:
             if (adc.ADS1256_Scan() == 1):
-                for i in [1]:#range(8):
+                for i in range(8):
                     readout_val[i] = adc.ADS1256_GetAdc(i)
                     volt_val[i] = (readout_val[i] * 100) / 167 / 1000000.0
                 #print "readout_val = ", readout_val
@@ -438,6 +438,6 @@ def main():
     print "TESTING ENDS"
 
 if __name__ == '__main__':
-    main()
+    main_ADS1256()
     
     
