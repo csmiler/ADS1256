@@ -248,7 +248,16 @@ class ADS1256:
         
     def ADS1256_ReadReg(self, _RegID):
         '''Read  the corresponding register'''
-        print "Read register: NOT IMPLEMENTED YET"
+        self.set_CS_Low()
+        self.ADS1256_Send8Bit(CMD['CMD_RREG'] | _RegID)
+        self.ADS1256_Send8Bit(0x00)
+    
+        self.ADS1256_DelayDATA()
+    
+        read = self.ADS1256_Recive8Bit()
+        self.set_CS_High()
+    
+        return read
         
     def ADS1256_WriteCmd(self, _cmd):
         '''Sending a single byte order'''
@@ -289,7 +298,10 @@ class ADS1256:
 #	*/
         if (_ch > 7):
             return
+        #self.ADS1256_WriteReg(REG_E['REG_MUX'], (_ch << 4) | (1 << 3))  # Bit3 = 1, AINN connection AINCOM
+        #print "Writing Register: ", hex((_ch << 4) | (1 << 3))
         self.ADS1256_WriteReg(REG_E['REG_MUX'], (_ch << 4) | (1 << 3))  # Bit3 = 1, AINN connection AINCOM
+        #print "Reading Register: ", hex(self.ADS1256_ReadReg(REG_E['REG_MUX']))
         
     def ADS1256_SetDiffChannal(self, _ch):
         '''The configuration difference channel'''
