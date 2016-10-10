@@ -298,10 +298,8 @@ class ADS1256:
 #	*/
         if (_ch > 7):
             return
-        #self.ADS1256_WriteReg(REG_E['REG_MUX'], (_ch << 4) | (1 << 3))  # Bit3 = 1, AINN connection AINCOM
-        #print "Writing Register: ", hex((_ch << 4) | (1 << 3))
         self.ADS1256_WriteReg(REG_E['REG_MUX'], (_ch << 4) | (1 << 3))  # Bit3 = 1, AINN connection AINCOM
-        #print "Reading Register: ", hex(self.ADS1256_ReadReg(REG_E['REG_MUX']))
+        
         
     def ADS1256_SetDiffChannal(self, _ch):
         '''The configuration difference channel'''
