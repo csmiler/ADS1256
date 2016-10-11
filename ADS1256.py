@@ -72,14 +72,14 @@ CMD = {'CMD_WAKEUP' : 0x00,     # Completes SYNC and Exits Standby Mode 0000  00
 # ADS1256 Python Module
 class ADS1256:
     
-    def __init__(self):
+    def __init__(self, ch_num=1):
         '''initialization and constants registration'''
         
         # data storage
         self.Gain = ADS1256_GAIN_E['ADS1256_GAIN_1']		# GAIN  1
         self.DataRate = ADS1256_DRATE_E['ADS1256_15SPS'] # DATA output speed
         self.AdcNow = [0, 0, 0, 0, 0, 0, 0, 0]			  # ADC  Conversion value
-        self.Channel = 1   # The current channel
+        self.Channel = ch_num   # The current channel
         self.ScanMode = 0  # Scanning mode_ 0 : Single-ended input  8 channel; 1 : Differential input  4 channel
         
         
@@ -134,7 +134,7 @@ class ADS1256:
         self.ScanMode =_ucScanMode
         self.Channel = _chnum
         self.AdcNow = [0, 0, 0, 0, 0, 0, 0, 0]  # reset
-        print self.AdcNow
+        #print self.AdcNow
         
     def ADS1256_Send8Bit(self, _data):
         '''SPI bus to send 8 bit data'''
