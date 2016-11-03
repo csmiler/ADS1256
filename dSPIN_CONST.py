@@ -1,12 +1,14 @@
+#!/usr/bin/env python
+
 # defines all the constants for STMicro L6470 dSPIN stepper motor driver
-from libbcm2835._bcm2835 import RPI_V2_GPIO_P1_36, RPI_V2_GPIO_P1_18, RPI_V2_GPIO_P1_22, RPI_V2_GPIO_P1_38
+from libbcm2835._bcm2835 import *
 
   
 # Pin settings are arbitrary and can be changed to any available
 # GPIO pin.
-dSPIN_RESET = RPI_V2_GPIO_P1_36    # Wire this to the STBY line
-dSPIN_BUSYN = RPI_V2_GPIO_P1_18   # Wire this to the BSYN line
-dSPIN_CS = RPI_V2_GPIO_P1_22	# Wire this to the CSN line
+# dSPIN_RESET = 16 #RPI_V2_GPIO_P1_36    # Wire this to the STBY line
+# dSPIN_BUSYN = 24 #RPI_V2_GPIO_P1_18   # Wire this to the BSYN line
+# dSPIN_CS = 25 #RPI_V2_GPIO_P1_22	# Wire this to the CSN line
 #dSPIN_MOSI = RPI_V2_GPIO_P1_38		# Wire this to the SDI line
 #dSPIN_MISO = 12		# Wire this to the SDO line
 #dSPIN_CLK = 21		# Wire this to the CK line*/

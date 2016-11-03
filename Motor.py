@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 # python module for motor control
 from dSPIN_CONST import *
 from Motor_dSPIN import Motor_dSPIN
@@ -5,9 +7,10 @@ from Motor_dSPIN import Motor_dSPIN
 class Motor(Motor_dSPIN):
 
     def __init__(self, _is_cw=True, _speed=100):
-        Motor_dSPIN.__init__()
-        self.is_cw = _direction
+        Motor_dSPIN.__init__(self, _dSPIN_BUSYN=24, _dSPIN_RESET=16, _dSPIN_CS=25)
+        self.is_cw = _is_cw
         self.speed = _speed
+        self.motor_init()
     
     def motor_init(self):
         '''config the motor'''
@@ -19,7 +22,7 @@ class Motor(Motor_dSPIN):
         #   - dSPIN_SYNC_SEL_x is the ratio of (micro)steps to toggles on the
         #     BUSY/SYNC pin (when that pin is used for SYNC). Make it 1:1, despite
         #     not using that pin.
-        self.dSPIN_SetParam(dSPIN_STEP_MODE, !dSPIN_SYNC_EN | dSPIN_STEP_SEL_1_128 | dSPIN_SYNC_SEL_1);
+        self.dSPIN_SetParam(dSPIN_STEP_MODE, ( (not dSPIN_SYNC_EN) | dSPIN_STEP_SEL_1_128 | dSPIN_SYNC_SEL_1 ) );
         # Configure the MAX_SPEED register- this is the maximum number of (micro)steps per
         #  second allowed. You'll want to mess around with your desired application to see
         #  how far you can push it before the motor starts to slip. The ACTUAL parameter
@@ -68,10 +71,10 @@ class Motor(Motor_dSPIN):
         
     def run(self):
         '''run the motor'''
-        if (_is_cw):
-            self.dSPIN_Run(FWD, SpdCalc(_speed))
+        if (self.is_cw):
+            self.dSPIN_Run(FWD, self.SpdCalc(self.speed))
         else:
-            self.dSPIN_Run(REV, SpdCalc(_speed))
+            self.dSPIN_Run(REV, self.SpdCalc(self.speed))
         
     def stop(self, hard_stop=True):
         '''stop the motor'''
@@ -123,8 +126,8 @@ class Motor(Motor_dSPIN):
         
     def set_speed(self, _speed):
         '''set the speed of the motor'''
-        max_speed = 400
-        if (isNumber(_speed)):
+        max_speed = 200
+        if ( isinstance(_speed, (int, long, float)) ):
             _speed = abs(int(_speed))
             if (_speed <= max_speed):
                 self.speed = _speed
@@ -132,6 +135,53 @@ class Motor(Motor_dSPIN):
                 return            
         
         print "WRONG INPUT SPEED!"
-            
-            
+        
+def main_motor():
+    '''test func'''
+    print "TEST STARTS!"
+    import time
+    m = Motor()
+    try:
+        print "RUN"
+        m.run()
+        time.sleep(3)
+        print "SET_SPEED"
+        m.set_speed(2)
+        time.sleep(13)
+        print "GET_SPEED"
+        print m.get_speed()
+        time.sleep(3)
+
+        print "SET_SPEED"
+        m.set_speed(10)
+        time.sleep(3)
+        print "GET_SPEED"
+        print m.get_speed()
+        time.sleep(3)
+##        print "SET_DIRECTION"
+##        m.set_direction('CCW')
+##        time.sleep(3)
+##        print "GET_DIRECTION"
+##        print m.get_direction()
+##        time.sleep(3)
+##        m.stop()
+##        print "GET_POS"
+##        print m.get_pos()
+##        print "RESET_POS"
+##        m.reset_pos()
+##        time.sleep(3)
+##        print "GET_POS"
+##        print m.get_pos()
+##        print "MOVE"
+##        m.move(400)
+##        print "GET_POS"
+##        print m.get_pos()
+        
+    finally:
+        print "STOP"
+        m.stop(False)
+        print "TEST ENDS!"
+    
+if __name__ == '__main__':
+    main_motor()
     

@@ -1,12 +1,24 @@
+#!/usr/bin/env python
+
 # python module for STMicro L6470 dSPIN stepper motor
 from libbcm2835._bcm2835 import *
 from dSPIN_CONST import *
 import numpy as np
 
+
 class Motor_dSPIN:
 
-    def __init__(self):
-        pass
+    def __init__(self, _dSPIN_BUSYN=24, _dSPIN_RESET=16, _dSPIN_CS=25):
+        '''set pins and initiate'''
+        # dSPIN_RESET = 16 #RPI_V2_GPIO_P1_36    # Wire this to the STBY line
+        # dSPIN_BUSYN = 24 #RPI_V2_GPIO_P1_18   # Wire this to the BSYN line
+        # dSPIN_CS = 25 #RPI_V2_GPIO_P1_22	# Wire this to the CSN line
+        self.dSPIN_BUSYN = _dSPIN_BUSYN
+        self.dSPIN_RESET = _dSPIN_RESET
+        self.dSPIN_CS = _dSPIN_CS
+
+        self.dSPIN_init()
+        
     
     # This is the generic initialization function to set up the Arduino to
     #  communicate with the dSPIN chip. 
@@ -15,7 +27,7 @@ class Motor_dSPIN:
         #  most significant bit first,
         #  SPI clock not to exceed 5MHz,
         # SPI_MODE3 (clock idle high, latch data on rising edge of clock) 
-        if (!bcm2835_init())
+        if (not bcm2835_init()):
             return 1;
         bcm2835_spi_begin();
         bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);      # Edited follow Arduino command
@@ -24,10 +36,10 @@ class Motor_dSPIN:
         #int err = 0;
         #err = wiringPiSetupGpio();
         # set up the input/output pins for the application.
-        bcm2835_gpio_fsel(dSPIN_BUSYN, BCM2835_GPIO_FSEL_INPT);;
-        bcm2835_gpio_fsel(dSPIN_RESET, BCM2835_GPIO_FSEL_OUTP);
-        bcm2835_gpio_fsel(dSPIN_CS, BCM2835_GPIO_FSEL_OUTP);
-        bcm2835_gpio_write(dSPIN_CS, HIGH);
+        bcm2835_gpio_fsel(self.dSPIN_BUSYN, BCM2835_GPIO_FSEL_INPT);
+        bcm2835_gpio_fsel(self.dSPIN_RESET, BCM2835_GPIO_FSEL_OUTP);
+        bcm2835_gpio_fsel(self.dSPIN_CS, BCM2835_GPIO_FSEL_OUTP);
+        bcm2835_gpio_write(self.dSPIN_CS, HIGH);
 #        /*pinMode(dSPIN_MOSI, OUTPUT);
 #        pinMode(dSPIN_MISO, INPUT);
 #        pinMode(dSPIN_CLK, OUTPUT);
@@ -37,12 +49,13 @@ class Motor_dSPIN:
 #            return dSPIN_STATUS_FATAL;
 #        }*/
 
-        bcm2835_gpio_write(dSPIN_RESET, HIGH);
-        delay(1);
-        bcm2835_gpio_write(dSPIN_RESET, LOW);
-        delay(1);
-        bcm2835_gpio_write(dSPIN_RESET, HIGH);
-        delay(1);
+        from time import sleep
+        bcm2835_gpio_write(self.dSPIN_RESET, HIGH);
+        sleep(0.001);
+        bcm2835_gpio_write(self.dSPIN_RESET, LOW);
+        sleep(0.001);
+        bcm2835_gpio_write(self.dSPIN_RESET, HIGH);
+        sleep(0.001);
 
         #digitalWrite(dSPIN_CLK, HIGH);
 
@@ -59,7 +72,7 @@ class Motor_dSPIN:
         very similar, so we deal with that by putting all of it in one function
         here to save memory space and simplify the program.
         '''
-        ret_val = np.uint64(0);   # This is a temp for the value to return.
+        ret_val = np.uint32(0);   # This is a temp for the value to return.
         # This switch structure handles the appropriate action for each register.
         #  This is necessary since not all registers are of the same length, either
         #  bit-wise or byte-wise, so we want to make sure we mask out any spurious
@@ -152,7 +165,7 @@ class Motor_dSPIN:
         elif (param == dSPIN_ST_SLP): 
             ret_val = self.dSPIN_Xfer(np.uint8(value));
             
-        elif (param == dSPIN_FN_SLP_ACC:) 
+        elif (param == dSPIN_FN_SLP_ACC):
             ret_val = self.dSPIN_Xfer(np.uint8(value));
             
         elif (param == dSPIN_FN_SLP_DEC): 
@@ -431,7 +444,7 @@ class Motor_dSPIN:
         # bcm2835_spi_transfer() both shifts a byte out on the MOSI pin AND receives a
         #  byte in on the MISO pin.
         data_out = bcm2835_spi_transfer(data);
-        bcm2835_gpio_write(dSPIN_CS, HIGH);
+        bcm2835_gpio_write(self.dSPIN_CS, HIGH);
         #bcm2835_delayMicroseconds( dSPIN_SPI_CLOCK_DELAY );
 
         return data_out;
@@ -443,13 +456,13 @@ class Motor_dSPIN:
     # Multiply desired steps/s/s by .137438 to get an appropriate value for this register.
     # This is a 12-bit value, so we need to make sure the value is at or below 0xFFF.
     def AccCalc(self, stepsPerSecPerSec):
-        return self.lesser(np.uint64(stepsPerSecPerSec * 0.137438), 0x00000FFF)
+        return self.lesser(np.uint32(stepsPerSecPerSec * 0.137438), 0x00000FFF)
         
 
     # The calculation for DEC is the same as for ACC. Value is 0x08A on boot.
     # This is a 12-bit value, so we need to make sure the value is at or below 0xFFF.
     def DecCalc(self, stepsPerSecPerSec):
-        return self.lesser(np.uint64(stepsPerSecPerSec * 0.137438), 0x00000FFF)
+        return self.lesser(np.uint32(stepsPerSecPerSec * 0.137438), 0x00000FFF)
         
 
     # The value in the MAX_SPD register is [(steps/s)*(tick)]/(2^-18) where tick is 
@@ -457,7 +470,7 @@ class Motor_dSPIN:
     # Multiply desired steps/s by .065536 to get an appropriate value for this register
     # This is a 10-bit value, so we need to make sure it remains at or below 0x3FF
     def MaxSpdCalc(self, stepsPerSec):
-        return self.lesser(np.uint64(stepsPerSec * .065536), 0x000003FF)
+        return self.lesser(np.uint32(stepsPerSec * .065536), 0x000003FF)
         
 
     # The value in the MIN_SPD register is [(steps/s)*(tick)]/(2^-24) where tick is 
@@ -465,7 +478,7 @@ class Motor_dSPIN:
     # Multiply desired steps/s by 4.1943 to get an appropriate value for this register
     # This is a 12-bit value, so we need to make sure the value is at or below 0xFFF.
     def MinSpdCalc(self, stepsPerSec):
-        return self.lesser(np.uint64(stepsPerSec * 4.1943), 0x00000FFF)
+        return self.lesser(np.uint32(stepsPerSec * 4.1943), 0x00000FFF)
     
 
     # The value in the FS_SPD register is ([(steps/s)*(tick)]/(2^-18))-0.5 where tick is 
@@ -473,7 +486,7 @@ class Motor_dSPIN:
     # Multiply desired steps/s by .065536 and subtract .5 to get an appropriate value for this register
     # This is a 10-bit value, so we need to make sure the value is at or below 0x3FF.
     def FSCalc(self, stepsPerSec):
-        return self.lesser(np.uint64((stepsPerSec * .065536)-.5), 0x000003FF)
+        return self.lesser(np.uint32((stepsPerSec * .065536)-.5), 0x000003FF)
     
 
     # The value in the INT_SPD register is [(steps/s)*(tick)]/(2^-24) where tick is 
@@ -481,7 +494,7 @@ class Motor_dSPIN:
     # Multiply desired steps/s by 4.1943 to get an appropriate value for this register
     # This is a 14-bit value, so we need to make sure the value is at or below 0x3FFF.
     def IntSpdCalc(self, stepsPerSec):
-        return self.lesser(np.uint64(stepsPerSec * 4.1943), 0x00003FFF)
+        return self.lesser(np.uint32(stepsPerSec * 4.1943), 0x00003FFF)
     
 
     # When issuing RUN command, the 20-bit speed is [(steps/s)*(tick)]/(2^-28) where tick is 
@@ -489,14 +502,14 @@ class Motor_dSPIN:
     # Multiply desired steps/s by 67.106 to get an appropriate value for this register
     # This is a 20-bit value, so we need to make sure the value is at or below 0xFFFFF.
     def SpdCalc(self, stepsPerSec):
-        return self.lesser(np.uint64(stepsPerSec * 67.106), 0x000FFFFF)
+        return self.lesser(np.uint32(stepsPerSec * 67.106), 0x000FFFFF)
     
 
     # Generalization of the subsections of the register read/write functionality.
     #  We want the end user to just write the value without worrying about length,
     #  so we pass a bit length parameter from the calling function.
     def dSPIN_Param(self, value, bit_len):
-        ret_val = np.uint64(0);        # We'll return this to generalize this function
+        ret_val = np.uint32(0);        # We'll return this to generalize this function
                                       #  for both read and write of registers.
         byte_len = np.uint8(bit_len/8);      # How many BYTES do we have?
         if (bit_len % 8 > 0):
@@ -513,13 +526,13 @@ class Motor_dSPIN:
         #  value, then we shift the received value back by the same amount and
         #  store it until return time.
         if (byte_len == 3):
-            ret_val |= dSPIN_Xfer(np.uint8(value>>16)) << 16;
+            ret_val |= self.dSPIN_Xfer(np.uint8(value>>16)) << 16;
             #Serial.println(ret_val, HEX);
         if (byte_len >= 2):
-            ret_val |= dSPIN_Xfer(np.uint8(value>>8)) << 8;
+            ret_val |= self.dSPIN_Xfer(np.uint8(value>>8)) << 8;
             #Serial.println(ret_val, HEX);
         if (byte_len >= 1):
-            ret_val |= dSPIN_Xfer(np.uint8(value));
+            ret_val |= self.dSPIN_Xfer(np.uint8(value));
             #Serial.println(ret_val, HEX);
         # Return the received values. Mask off any unnecessary bits, just for
         #  the sake of thoroughness- we don't EXPECT to see anything outside

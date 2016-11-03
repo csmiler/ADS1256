@@ -1,6 +1,4 @@
 # Python module for ADS1256 
-# By: Wang Zhou @IBM
-# Date: 09/29/2016
 
 from libbcm2835._bcm2835 import *
 import numpy as np
@@ -72,12 +70,19 @@ CMD = {'CMD_WAKEUP' : 0x00,     # Completes SYNC and Exits Standby Mode 0000  00
 # ADS1256 Python Module
 class ADS1256:
     
-    def __init__(self, ch_num=1):
+    def __init__(self, ch_num=0, gain='ADS1256_GAIN_1', rate='ADS1256_100SPS'):
         '''initialization and constants registration'''
         
         # data storage
-        self.Gain = ADS1256_GAIN_E['ADS1256_GAIN_1']		# GAIN  1
-        self.DataRate = ADS1256_DRATE_E['ADS1256_15SPS'] # DATA output speed
+        if ADS1256_GAIN_E.has_key(gain):
+            self.Gain = ADS1256_GAIN_E[gain]
+        else:
+            self.Gain = ADS1256_GAIN_E['ADS1256_GAIN_1']		# GAIN  1
+        if ADS1256_DRATE_E.has_key(rate):
+            self.DataRate = ADS1256_DRATE_E[rate]
+        else:
+            self.DataRate = ADS1256_DRATE_E['ADS1256_100SPS'] # DATA output speed
+            
         self.AdcNow = [0, 0, 0, 0, 0, 0, 0, 0]			  # ADC  Conversion value
         self.Channel = ch_num   # The current channel
         self.ScanMode = 0  # Scanning mode_ 0 : Single-ended input  8 channel; 1 : Differential input  4 channel
@@ -87,15 +92,27 @@ class ADS1256:
         self.DRDY = RPI_GPIO_P1_11  #P0
         self.RST = RPI_GPIO_P1_12    #P1
         self.SPICS = RPI_GPIO_P1_15	#P3
-        
-        
+
+        # adc chip initialization
+        if not bcm2835_init():
+            return
+        self.chipInit()
+        self.ADS1256_CfgADC(self.Gain, self.DataRate)
+        self.ADS1256_StartScan(0, self.Channel)
         
     def chipInit(self):
         '''configure the chip before data transmission'''
         bcm2835_spi_begin()
-        bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_LSBFIRST );   #The default
-        bcm2835_spi_setDataMode(BCM2835_SPI_MODE1);                 #The default
-        bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_1024);#The default
+        # default setting for ADS1256
+        #bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_LSBFIRST );   #The default
+        #bcm2835_spi_setDataMode(BCM2835_SPI_MODE1);                 #The default
+        #bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_1024);#The default
+        # default setting from motor control
+        bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);      # Edited follow Arduino command
+                                                                      # Set Register x00 to set bit order
+        bcm2835_spi_setDataMode(BCM2835_SPI_MODE3);                   # Edited follow Arduino Command
+        bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_4096);
+        
         bcm2835_gpio_fsel(self.SPICS, BCM2835_GPIO_FSEL_OUTP);
         bcm2835_gpio_write(self.SPICS, HIGH);
         bcm2835_gpio_fsel(self.DRDY, BCM2835_GPIO_FSEL_INPT);
@@ -133,6 +150,7 @@ class ADS1256:
         '''Configuration DRDY PIN for external interrupt is triggered'''
         self.ScanMode =_ucScanMode
         self.Channel = _chnum
+        self.ADS1256_SetChannel(self.Channel)
         self.AdcNow = [0, 0, 0, 0, 0, 0, 0, 0]  # reset
         #print self.AdcNow
         
@@ -177,11 +195,12 @@ class ADS1256:
 #			ACAL=1  enable  calibration
 		###
 #		//buf[0] = (0 << 3) | (1 << 2) | (1 << 1);//enable the internal buffer
-        buf[0] = (0 << 3) | (1 << 2) | (0 << 1); # The internal buffer is prohibited
+        buf[0] = (0 << 3) | (1 << 2) | (0 << 1); # 0000 0100: MSBF, Auto-cal, Buffer disabled, Data Ready
 
-        # //ADS1256_WriteReg(REG_STATUS, (0 << 3) | (1 << 2) | (1 << 1));
-
-        buf[1] = 0x08	
+        # MUX: Input multiplexer Control register (Address 01h)
+        # Bits 7-4: Positive Input Channel (0-7 = AIN0-7, 1xxx = AINCOM)
+        # Bits 3-0: Negative Input Channel (0-7 = AIN0-7, 1xxx = AINCOM)
+        buf[1] = 0x08	# Positive Input Channel: AIN0, Negative Input Channel: AINCOM
 
 #		/*	ADCON: A/D Control Register (Address 02h)
 #			Bit 7 Reserved, always 0 (Read Only)
@@ -210,13 +229,13 @@ class ADS1256:
 #				110 = 64
 #				111 = 64
 #		*/
-        buf[2] = (0 << 5) | (0 << 3) | (_gain << 0)
+        buf[2] = (0 << 5) | (0 << 3) | (_gain << 0) # Clock out off, Sensor detect off, gain = 1
 		#//ADS1256_WriteReg(REG_ADCON, (0 << 5) | (0 << 2) | (GAIN_1 << 1));	/*choose 1: gain 1 ;input 5V/
-        buf[3] = ADS1256_DRATE_E[_drate]
+        buf[3] = self.DataRate #ADS1256_DRATE_E[_drate]
         
         self.set_CS_Low()
-        self.ADS1256_Send8Bit(CMD['CMD_WREG'] | 0) # Write command register, send the register address
-        self.ADS1256_Send8Bit(0x03);  # Register number 4,Initialize the number  -1
+        self.ADS1256_Send8Bit(CMD['CMD_WREG'] | 0) # Write register, starting with register address 0
+        self.ADS1256_Send8Bit(0x03);  # number of bytes to be sent: 4 (writing 4 registers), set the number = 4 - 1
         
         self.ADS1256_Send8Bit(buf[0]) # Set the status register
         self.ADS1256_Send8Bit(buf[1]) # Set the input channel parameters
@@ -267,9 +286,11 @@ class ADS1256:
         
     def ADS1256_ReadChipID(self):
         '''Read the chip ID'''
-        print "Read the chip ID: NOT IMPLEMENTED YET"
+        self.ADS1256_WaitDRDY();
+        chipID = self.ADS1256_ReadReg(REG_E['REG_STATUS'])
+        return (chipID >> 4)
         
-    def ADS1256_SetChannal(self, _ch):
+    def ADS1256_SetChannel(self, _ch):
         '''Configuration channel number'''
 #        /*
 #	Bits 7-4 PSEL3, PSEL2, PSEL1, PSEL0: Positive Input Channel (AINP) Select
@@ -299,11 +320,47 @@ class ADS1256:
         if (_ch > 7):
             return
         self.ADS1256_WriteReg(REG_E['REG_MUX'], (_ch << 4) | (1 << 3))  # Bit3 = 1, AINN connection AINCOM
+        self.Channel = _ch
         
         
-    def ADS1256_SetDiffChannal(self, _ch):
+    def ADS1256_SetDiffChannel(self, _ch):
         '''The configuration difference channel'''
-        print "Configure difference channel: NOT IMPLEMENTED YET"
+        
+##	Bits 7-4 PSEL3, PSEL2, PSEL1, PSEL0: Positive Input Channel (AINP) Select
+##		0000 = AIN0 (default)
+##		0001 = AIN1
+##		0010 = AIN2 (ADS1256 only)
+##		0011 = AIN3 (ADS1256 only)
+##		0100 = AIN4 (ADS1256 only)
+##		0101 = AIN5 (ADS1256 only)
+##		0110 = AIN6 (ADS1256 only)
+##		0111 = AIN7 (ADS1256 only)
+##		1xxx = AINCOM (when PSEL3 = 1, PSEL2, PSEL1, PSEL0 are dont't care)
+##
+##		NOTE: When using an ADS1255 make sure to only select the available inputs.
+##
+##	Bits 3-0 NSEL3, NSEL2, NSEL1, NSEL0: Negative Input Channel (AINN)Select
+##		0000 = AIN0
+##		0001 = AIN1 (default)
+##		0010 = AIN2 (ADS1256 only)
+##		0011 = AIN3 (ADS1256 only)
+##		0100 = AIN4 (ADS1256 only)
+##		0101 = AIN5 (ADS1256 only)
+##		0110 = AIN6 (ADS1256 only)
+##		0111 = AIN7 (ADS1256 only)
+##		1xxx = AINCOM (when NSEL3 = 1, NSEL2, NSEL1, NSEL0 are don't care)
+	if (_ch == 0):
+            self.ADS1256_WriteReg(REG_E['REG_MUX'], (0 << 4) | 1);  # /* DiffChannel  AIN0 - AIN1 */
+	elif (_ch == 1):
+	    self.ADS1256_WriteReg(REG_E['REG_MUX'], (2 << 4) | 3);   # /*DiffChannel   AIN2 - AIN3 */
+	elif (_ch == 2):
+	    self.ADS1256_WriteReg(REG_E['REG_MUX'], (4 << 4) | 5);   # /*DiffChannel    AIN4 - AIN5 */
+	elif (_ch == 3):
+	    self.ADS1256_WriteReg(REG_E['REG_MUX'], (6 << 4) | 7);   # /*DiffChannel   AIN6 - AIN7 */
+
+	if (_ch in range(4)):
+            self.Channel = _ch
+    
         
     def ADS1256_WaitDRDY(self):
         '''delay time  wait for automatic calibration'''
@@ -341,16 +398,46 @@ class ADS1256:
         return np.int32(read)
 
     def ADS1256_GetAdc(self, _ch):
-        '''read ADC value'''
+        '''read stored ADC value'''
         if (_ch > 7):
             return 0
         
         return self.AdcNow[_ch]
+
+##    def ADS1256_ScanAndReadChannel(self, _ch=-1):
+##        '''scan and readout'''
+##        if (_ch > 7):
+##            return None
+##        self.ADS1256_Scan()
+##        if (True):#(self.ADS1256_Scan() == 1):
+##            if (_ch == -1): # reading all channels
+##                readout = [self.ADS1256_GetAdc(i) for i in range(8)]
+##            else:
+##                readout = [self.ADS1256_GetAdc(_ch)]
+##            return [self.Data_To_Volt(val) for val in readout]
+##        else:
+##            return None
+
+    def ADS1256_OneShot(self, _ch):
+        '''one shot read channel'''
+        if ( _ch != self.Channel ):
+            self.ADS1256_SetChannel(self.Channel)
+            self.bsp_DelayUS(5)
+
+        self.ADS1256_WriteCmd(CMD['CMD_SYNC'])
+        self.bsp_DelayUS(5)
+
+        self.ADS1256_WriteCmd(CMD['CMD_WAKEUP']);
+        self.bsp_DelayUS(25)
+
+        self.AdcNow[self.Channel] = self.ADS1256_ReadData()
+
+        return self.Data_To_Volt(self.AdcNow[self.Channel])
         
     def ADS1256_ISR(self):
         '''Collection procedures'''
         if (self.ScanMode == 0): # 0  Single-ended input  8 channel
-            self.ADS1256_SetChannal(self.Channel) # Switch channel mode
+            self.ADS1256_SetChannel(self.Channel) # Switch channel mode
             self.bsp_DelayUS(5)
 
             self.ADS1256_WriteCmd(CMD['CMD_SYNC'])
@@ -369,7 +456,7 @@ class ADS1256:
                 self.Channel = 0
                 
         else:   # 1 Differential input  4 channel
-            self.ADS1256_SetDiffChannal(self.Channel) # change DiffChannal
+            self.ADS1256_SetDiffChannel(self.Channel) # change DiffChannel
             self.bsp_DelayUS(5)
 
             self.ADS1256_WriteCmd(CMD['CMD_SYNC'])
@@ -385,7 +472,7 @@ class ADS1256:
             
             self.Channel = self.Channel + 1
             if (self.Channel >= 4):
-                g_tADS1256.Channel = 0
+                self.Channel = 0
     
     def ADS1256_Scan(self):
         '''Scan function'''
@@ -402,6 +489,10 @@ class ADS1256:
         '''Voltage value conversion function. Vref : The reference voltage 3.3V or 5V
         voltage : output DAC value'''
         return np.int16(65536 * voltage / Vref)
+
+    def Data_To_Volt(self, val):
+        '''Convert 24 bits to voltage'''
+        return (val * 100) / 167 / 1000000.0
     
 def main_ADS1256():
     '''Module testing helper function'''
@@ -412,25 +503,24 @@ def main_ADS1256():
         return
 
     try:
-        adc = ADS1256()
-        adc.chipInit()
         ch_num = 0
-        adc.ADS1256_CfgADC(ADS1256_GAIN_E['ADS1256_GAIN_1'], 'ADS1256_15SPS')
-        adc.ADS1256_StartScan(0,ch_num)
-        adc.ADS1256_Scan()
+        adc = ADS1256(ch_num)
         
         readout_val = [0,0,0,0,0,0,0,0]#-1.0
         volt_val = [0,0,0,0,0,0,0,0] #-2.0
         while True:
-            if (adc.ADS1256_Scan() == 1):
-                for i in range(8):
-                    readout_val[i] = adc.ADS1256_GetAdc(i)
-                    volt_val[i] = (readout_val[i] * 100) / 167 / 1000000.0
-                #print "readout_val = ", readout_val
-                print " volt_val = ", volt_val
-            else:
-                print "NO scan performed!"
-            adc.bsp_DelayUS(100000)#(100000)    
+            #print adc.ADS1256_ScanAndReadChannel(1)
+            adc.ADS1256_OneShot(0)
+            print [adc.Data_To_Volt(val) for val in adc.AdcNow]
+##            if (adc.ADS1256_Scan() == 1):
+##                for i in [1]:#range(8):
+##                    readout_val[i] = adc.ADS1256_GetAdc(i)
+##                    volt_val[i] = (readout_val[i] * 100) / 167 / 1000000.0
+##                #print "readout_val = ", readout_val
+##                print " volt_val = ", volt_val
+##            else:
+##                print "NO scan performed!"
+            adc.bsp_DelayUS(10000)#(100000) # limited sampling rate
     finally:
         bcm2835_spi_end()
         bcm2835_close()
